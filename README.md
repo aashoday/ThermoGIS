@@ -1,1 +1,1 @@
-# sih-fire-detection
+# ThermoGIS 
