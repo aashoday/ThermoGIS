@@ -17,12 +17,12 @@ function colorForClass(predictedClass) {
   return CLASS_COLORS[predictedClass] || '#ffffff'
 }
 
-export default function FireMap({ onHotspotClick }) {
+export default function FireMap({ onHotspotClick, predictedClass }) {
   const mapContainerRef = useRef(null)
   const mapRef = useRef(null)
   const [mapLoaded, setMapLoaded] = useState(false)
 
-  const { data: hotspotsData } = useHotspots()
+  const { data: hotspotsData } = useHotspots({ predictedClass })
   const { data: assetsData } = useAssets()
 
   // Init map once
