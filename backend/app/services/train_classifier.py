@@ -62,13 +62,15 @@ def train_and_predict():
         )
         model.fit(X, y)
 
-        # Training-fit predictions — a sanity check, not a held-out evaluation.
-        # With 53 samples, a proper train/test split leaves too little to
-        # learn from; we say so openly rather than dress this up as real accuracy.
         y_pred = model.predict(X)
         print("\nTraining-fit classification report (NOT a held-out test — sanity check only):")
-        print(classification_report(y, y_pred, target_names=encoder.classes_, zero_division=0))
-
+        all_label_indices = list(range(len(LABELS)))
+        print(classification_report(
+            y, y_pred,
+            labels=all_label_indices,
+            target_names=encoder.classes_,
+            zero_division=0,
+        ))
         probabilities = model.predict_proba(X)
         predicted_labels = encoder.inverse_transform(y_pred)
         confidences = probabilities.max(axis=1)

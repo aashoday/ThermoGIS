@@ -11,6 +11,7 @@ import uuid
 from datetime import datetime
 
 import requests
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 from geoalchemy2.shape import from_shape
 from shapely.geometry import Point
@@ -46,6 +47,7 @@ def fetch_firms_csv() -> str:
 def parse_and_load(csv_text: str, db: Session) -> int:
     reader = csv.DictReader(io.StringIO(csv_text))
     count = 0
+    skipped = 0
 
     for row in reader:
         try:
@@ -59,6 +61,30 @@ def parse_and_load(csv_text: str, db: Session) -> int:
             acquired_at = datetime.strptime(
                 f"{acq_date} {acq_time}", "%Y-%m-%d %H%M"
             )
+
+            # FIRMS returns a rolling window on every call, so the same
+            # detection reappears across scheduled runs. Dedupe on the
+            # natural key (same satellite pass + same location, rounded
+            # to VIIRS's ~375m pixel precision) before inserting, or the
+            # table grows unbounded every 30 minutes.
+            existing = db.execute(
+                text("""
+                    SELECT 1 FROM hotspots
+                    WHERE acquired_at = :acquired_at
+                      AND source = 'VIIRS'
+                      AND ST_DWithin(
+                          geom::geography,
+                          ST_SetSRID(ST_MakePoint(:lon, :lat), 4326)::geography,
+                          50
+                      )
+                    LIMIT 1
+                """),
+                {"acquired_at": acquired_at, "lon": lon, "lat": lat},
+            ).fetchone()
+
+            if existing:
+                skipped += 1
+                continue
 
             point = Point(lon, lat)
             geom = from_shape(point, srid=4326)
@@ -78,6 +104,7 @@ def parse_and_load(csv_text: str, db: Session) -> int:
             continue
 
     db.commit()
+    print(f"  ({skipped} duplicates skipped)")
     return count
 
 
