@@ -121,10 +121,15 @@ export default function FireMap({ onHotspotClick, predictedClass }) {
       },
     })
 
-    map.on('click', 'hotspots-layer', (e) => {
+      map.on('click', 'hotspots-layer', (e) => {
       const feature = e.features[0]
       if (onHotspotClick) {
-        onHotspotClick(feature.properties)
+        // Pass geometry along with properties so downstream consumers
+        // (like the "Get Directions" button) have coordinates available.
+        onHotspotClick({
+          ...feature.properties,
+          geometry: feature.geometry,
+        })
       }
     })
 

@@ -25,6 +25,11 @@ function formatDateTime(isoString) {
   })
 }
 
+function getDirectionsUrl(hotspot) {
+  const [lon, lat] = hotspot.geometry?.coordinates || []
+  return `https://www.google.com/maps/dir/?api=1&destination=${lat},${lon}`
+}
+
 export default function HotspotDetailPanel({ hotspot, onClose }) {
   if (!hotspot) return null
 
@@ -73,6 +78,15 @@ export default function HotspotDetailPanel({ hotspot, onClose }) {
         <DetailRow label="Source" value={hotspot.source} />
         <DetailRow label="Detected" value={formatDateTime(hotspot.acquired_at)} />
         <DetailRow label="Cluster ID" value={hotspot.cluster_id ?? 'N/A'} />
+
+        <a
+          href={getDirectionsUrl(hotspot)}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center justify-center gap-2 mt-2 px-4 py-2 rounded-md bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium transition-colors"
+        >
+          📍 Get Directions
+        </a>
       </div>
     </div>
   )
