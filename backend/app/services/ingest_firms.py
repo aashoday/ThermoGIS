@@ -5,6 +5,7 @@ hotspots table.
 
 FIRMS API docs: https://firms.modaps.eosdis.nasa.gov/api/area/
 """
+import os
 import csv
 import io
 import uuid
@@ -20,6 +21,10 @@ from app.database import SessionLocal
 from app.models.hotspot import Hotspot
 from app.config import settings
 
+CACHE_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "data_cache")
+FIRMS_CACHE_PATH = os.path.join(CACHE_DIR, "firms_last_success.csv")
+
+
 FIRMS_BASE_URL = "https://firms.modaps.eosdis.nasa.gov/api/area/csv"
 SATELLITE = "VIIRS_SNPP_NRT"  # near-real-time VIIRS, 375m
 DAY_RANGE = 5
@@ -31,17 +36,32 @@ def fetch_firms_csv() -> str:
 
     url = f"{FIRMS_BASE_URL}/{settings.firms_map_key}/{SATELLITE}/{settings.region_bbox}/{DAY_RANGE}"
     print(f"Requesting: {url}")
-    response = requests.get(url, timeout=30)
 
-    if response.status_code != 200:
-        print(f"FIRMS returned status {response.status_code}")
-        print(f"Response body: {response.text[:500]}")
-        response.raise_for_status()
+    try:
+        response = requests.get(url, timeout=30)
 
-    if response.text.startswith("Invalid") or "error" in response.text[:100].lower():
-        raise ValueError(f"FIRMS API returned an error: {response.text[:200]}")
+        if response.status_code != 200:
+            print(f"FIRMS returned status {response.status_code}")
+            print(f"Response body: {response.text[:500]}")
+            response.raise_for_status()
 
-    return response.text
+        if response.text.startswith("Invalid") or "error" in response.text[:100].lower():
+            raise ValueError(f"FIRMS API returned an error: {response.text[:200]}")
+
+        # Success — cache this response so a future live failure has a fallback.
+        os.makedirs(CACHE_DIR, exist_ok=True)
+        with open(FIRMS_CACHE_PATH, "w") as f:
+            f.write(response.text)
+
+        return response.text
+
+    except (requests.exceptions.RequestException, ValueError) as e:
+        print(f"FIRMS live request failed: {e}")
+        if os.path.exists(FIRMS_CACHE_PATH):
+            print(f"Falling back to cached response: {FIRMS_CACHE_PATH}")
+            with open(FIRMS_CACHE_PATH, "r") as f:
+                return f.read()
+        raise  # no cache available fails loudly
 
 
 def parse_and_load(csv_text: str, db: Session) -> int:

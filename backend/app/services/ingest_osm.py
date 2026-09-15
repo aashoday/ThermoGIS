@@ -5,6 +5,8 @@ loads them into the industrial_assets table.
 """
 import time
 import uuid
+import json
+import os
 
 import requests
 from sqlalchemy.orm import Session
@@ -41,6 +43,10 @@ QUERY_SERVER_TIMEOUT = 150  # seconds, told to the Overpass server itself
 MAX_RETRIES_PER_MIRROR = 2
 RETRY_BACKOFF_SECONDS = 5
 
+CACHE_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "data_cache")
+OSM_CACHE_PATH = os.path.join(CACHE_DIR, "osm_last_success.json")
+
+
 
 def build_overpass_query(bbox: str) -> str:
     min_lon, min_lat, max_lon, max_lat = map(float, bbox.split(","))
@@ -76,18 +82,20 @@ def fetch_osm_assets() -> list:
                     timeout=REQUEST_TIMEOUT,
                 )
                 if response.status_code == 200:
-                    return response.json().get("elements", [])
+                    elements = response.json().get("elements", [])
+                    # Success — cache it for future fallback.
+                    os.makedirs(CACHE_DIR, exist_ok=True)
+                    with open(OSM_CACHE_PATH, "w") as f:
+                        json.dump(elements, f)
+                    return elements
 
                 print(f"  status {response.status_code}: {response.text[:300]}")
-                last_error = requests.exceptions.HTTPError(
-                    f"{response.status_code} from {url}"
-                )
+                last_error = requests.exceptions.HTTPError(f"{response.status_code} from {url}")
                 if response.status_code in (504, 429, 503):
-                    # transient — worth retrying same mirror before moving on
                     time.sleep(RETRY_BACKOFF_SECONDS)
                     continue
                 else:
-                    break  # non-transient error, try next mirror instead
+                    break
 
             except requests.exceptions.RequestException as e:
                 print(f"  failed: {e}")
@@ -95,9 +103,13 @@ def fetch_osm_assets() -> list:
                 time.sleep(RETRY_BACKOFF_SECONDS)
                 continue
 
-    raise RuntimeError(
-        f"All Overpass mirrors failed. Last error: {last_error}"
-    )
+    print(f"All Overpass mirrors failed. Last error: {last_error}")
+    if os.path.exists(OSM_CACHE_PATH):
+        print(f"Falling back to cached response: {OSM_CACHE_PATH}")
+        with open(OSM_CACHE_PATH, "r") as f:
+            return json.load(f)
+
+    raise RuntimeError(f"All Overpass mirrors failed and no cache available. Last error: {last_error}")
 
 
 def classify_asset_type(tags: dict) -> str:

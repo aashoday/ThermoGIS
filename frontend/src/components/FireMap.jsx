@@ -1,7 +1,14 @@
-import { useEffect, useRef, useState } from 'react'
-import * as maplibregl from 'maplibre-gl'
 import { useHotspots } from '../hooks/useHotspots'
 import { useAssets } from '../hooks/useAssets'
+import { useEffect, useRef, useState } from 'react'
+import * as maplibregl from 'maplibre-gl'
+import maplibreWorkerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url'
+
+// Must run once, before any Map is constructed. Vite's production build
+// can't statically detect MapLibre's internal worker path (it's computed
+// at runtime), so the worker chunk never gets emitted without this —
+// works in `npm run dev` but silently fails in production otherwise.
+maplibregl.setWorkerUrl(maplibreWorkerUrl)
 
 // Gujarat-centered default view
 const DEFAULT_CENTER = [71.5, 22.5]

@@ -24,10 +24,23 @@ services:
         condition: service_healthy
     environment:
       DATABASE_URL: postgresql://fireuser:firepass@db:5432/firedb
+    env_file:
+      - ./backend/.env
     ports:
       - "8000:8000"
     volumes:
       - ./backend:/app
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_API_BASE_URL: http://localhost:8000
+    container_name: thermogis_frontend
+    depends_on:
+      - backend
+    ports:
+      - "5173:80"
 
 volumes:
   pgdata:

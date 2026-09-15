@@ -24,3 +24,6 @@ data/raw/*
 
 # Docker
 *.log
+
+backend/data_cache/*.csv
+backend/data_cache/*.json
