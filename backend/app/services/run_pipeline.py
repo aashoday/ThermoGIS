@@ -2,8 +2,9 @@
 Runs the full ThermoGIS pipeline end-to-end:
   1. Ingest new FIRMS hotspots
   2. Spatial join (nearest industrial asset + distance)
-  3. ST-DBSCAN clustering (persistence signal)
-  4. LightGBM classification
+  3. Landcover tagging (ESA WorldCover sample per hotspot)
+  4. ST-DBSCAN clustering (persistence signal)
+  5. LightGBM classification
 
 OSM industrial assets are NOT re-ingested here on purpose — that data
 changes rarely and Overpass is slow/rate-limited, so re-pulling it on
@@ -18,6 +19,7 @@ from datetime import datetime
 
 from app.services.ingest_firms import run_ingestion as ingest_firms
 from app.services.spatial_join import run_spatial_join
+from app.services.ingest_landcover import run_landcover_tagging
 from app.services.cluster_hotspots import run_clustering
 from app.services.train_classifier import train_and_predict
 
@@ -31,6 +33,7 @@ def run_full_pipeline():
     steps = [
         ("Ingest FIRMS hotspots", ingest_firms),
         ("Spatial join", run_spatial_join),
+        ("Landcover tagging", run_landcover_tagging),
         ("Clustering", run_clustering),
         ("Classify", train_and_predict),
     ]
