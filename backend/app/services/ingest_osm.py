@@ -34,8 +34,10 @@ INDUSTRIAL_TAGS = [
     ("landuse", "industrial"),
     ("man_made", "works"),
     ("industrial", "refinery"),
+    ("industrial", "oil"),
     ("man_made", "petroleum_well"),
     ("landuse", "quarry"),
+    ("power", "plant"),
 ]
 
 REQUEST_TIMEOUT = 180       # seconds, client-side (must exceed server-side query timeout below)
@@ -115,6 +117,13 @@ def fetch_osm_assets() -> list:
 def classify_asset_type(tags: dict) -> str:
     if tags.get("industrial") == "refinery":
         return "refinery"
+    if tags.get("industrial") == "oil":
+        return "petrochemical"
+    if tags.get("power") == "plant":
+        source = (tags.get("plant:source") or "").lower()
+        if source in {"coal", "gas", "oil", "diesel"}:
+            return "thermal_power_plant"
+        return "power_plant_other"
     if tags.get("man_made") == "petroleum_well":
         return "oil_well"
     if tags.get("landuse") == "quarry":
@@ -124,7 +133,6 @@ def classify_asset_type(tags: dict) -> str:
     if tags.get("landuse") == "industrial":
         return "industrial_zone"
     return "industrial_other"
-
 
 def parse_and_load(elements: list, db: Session) -> int:
     count = 0

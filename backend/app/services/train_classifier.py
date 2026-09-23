@@ -10,6 +10,7 @@ import joblib
 import lightgbm as lgb
 import pandas as pd
 from sklearn.metrics import classification_report
+from sklearn.model_selection import cross_val_predict, StratifiedKFold
 from sklearn.preprocessing import LabelEncoder
 from sqlalchemy import text
 
@@ -47,33 +48,79 @@ def train_and_predict():
         y_raw = df["heuristic_label"]
 
         encoder = LabelEncoder()
-        encoder.fit(LABELS)  # fixed label set, so encoding is stable even if a class is absent this run
+        encoder.fit(LABELS)     # fixed label set, so encoding is stable even if a class is absent
         y = encoder.transform(y_raw)
 
+        print("\nFeature dtypes going into the model:")
+        print(X.dtypes)
+        print("\nCategorical value counts:")
+        print(f"  landcover_class: {df['landcover_class'].value_counts().to_dict()}")
+        print(f"  nearest_asset_type: {df['nearest_asset_type'].value_counts().to_dict()}")
+
         model = lgb.LGBMClassifier(
-            n_estimators=100,
-            max_depth=4,          # shallow trees — appropriate for a small dataset, avoids overfitting
-            num_leaves=8,
-            min_child_samples=2,  # small dataset needs a low leaf-size floor
+            n_estimators=150,
+            max_depth=5,
+            num_leaves=16,
+            min_child_samples=2,
             learning_rate=0.1,
+            feature_fraction=0.7,
+            bagging_fraction=0.8,
+            bagging_freq=1,
+            min_data_per_group=3,     # THE actual fix — default is 100, which silently
+                                       # forbids splitting on ANY category with fewer than
+                                       # 100 samples. Every value in landcover_class and
+                                       # nearest_asset_type has far fewer than that
+                                       # (mine_quarry: 3, refinery: 4, Water Bodies: 3), so
+                                       # the categorical features were structurally blocked
+                                       # from ever being used, independent of tuning above
+            cat_smooth=1,              # default (10) over-smooths split gain for exactly
+                                       # this kind of low-count category; small dataset
+                                       # needs less aggressive smoothing
             objective="multiclass",
             num_class=len(LABELS),
+            class_weight="balanced",
             verbosity=-1,
         )
-        model.fit(X, y)
+        
 
-        y_pred = model.predict(X)
-        print("\nTraining-fit classification report (NOT a held-out test — sanity check only):")
-        all_label_indices = list(range(len(LABELS)))
+        # Confidence must come from genuinely held-out predictions (see the
+        # comment history on this function). With 6 classes now instead of
+        # 3, some classes may have very few examples — guard against
+        # StratifiedKFold failing outright when a class has fewer members
+        # than the fold count.
+        label_counts = df["heuristic_label"].value_counts()
+        smallest_class_count = label_counts.min()
+
+        if smallest_class_count < 2:
+            print(
+                f"\nWARNING: class '{label_counts.idxmin()}' has only "
+                f"{smallest_class_count} sample(s) — too few for cross-validation. "
+                f"Falling back to in-sample (optimistic) confidence for this run; "
+                f"more data for that class will fix this properly."
+            )
+            model.fit(X, y)
+            oof_probabilities = model.predict_proba(X)
+        else:
+            n_splits = max(2, min(5, smallest_class_count))
+            cv = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=42)
+            oof_probabilities = cross_val_predict(model, X, y, cv=cv, method="predict_proba")
+            print(f"\nUsing {n_splits}-fold cross-validation for held-out confidence scores.")
+
+        y_pred_oof = oof_probabilities.argmax(axis=1)
+        predicted_labels = encoder.inverse_transform(y_pred_oof)
+        confidences = oof_probabilities.max(axis=1)
+
+        all_label_ids = list(range(len(LABELS)))
+        print("\nOut-of-fold classification report (genuine held-out signal, not in-sample):")
         print(classification_report(
-            y, y_pred,
-            labels=all_label_indices,
-            target_names=encoder.classes_,
-            zero_division=0,
+            y, y_pred_oof, labels=all_label_ids, target_names=encoder.classes_, zero_division=0
         ))
-        probabilities = model.predict_proba(X)
-        predicted_labels = encoder.inverse_transform(y_pred)
-        confidences = probabilities.max(axis=1)
+
+        # Explicit categorical_feature pin here (not just relying on pandas
+        # category-dtype auto-detection) — belt-and-suspenders so we know
+        # for certain LightGBM is treating these as categorical, not silently
+        # falling back to something else.
+        model.fit(X, y, categorical_feature=["landcover_class", "nearest_asset_type"])
 
         os.makedirs(MODEL_DIR, exist_ok=True)
         joblib.dump(model, MODEL_PATH)
@@ -89,9 +136,9 @@ def train_and_predict():
         db.commit()
         print(f"Wrote predictions back to {len(df)} hotspots.")
 
-        print("\nFeature importance:")
+        print("\nFeature importance (from final full-fit model):")
         for feat, imp in zip(FEATURE_COLUMNS, model.feature_importances_):
-            print(f"  {feat}: {imp}")
+            print(f"    {feat}: {imp}")
 
     finally:
         db.close()
