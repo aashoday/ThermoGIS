@@ -15,10 +15,13 @@ const DEFAULT_CENTER = [71.5, 22.5]
 const DEFAULT_ZOOM = 6.5
 
 const CLASS_COLORS = {
-  industrial: '#ef4444',      // red
-  non_industrial: '#6b7280',  // gray
-  uncertain: '#f59e0b',       // amber
-}
+  industrial_fire: "#dc2626",
+  gas_flare: "#ea580c",
+  mining_activity: "#92400e",
+  agricultural_burn: "#ca8a04",
+  wildfire: "#16a34a",
+  uncertain: "#6b7280",
+};
 
 function colorForClass(predictedClass) {
   return CLASS_COLORS[predictedClass] || '#ffffff'
@@ -110,8 +113,11 @@ export default function FireMap({ onHotspotClick, predictedClass }) {
         ],
         'circle-color': [
           'match', ['get', 'predicted_class'],
-          'industrial', CLASS_COLORS.industrial,
-          'non_industrial', CLASS_COLORS.non_industrial,
+          'industrial_fire', CLASS_COLORS.industrial_fire,
+          'gas_flare', CLASS_COLORS.gas_flare,
+          'mining_activity', CLASS_COLORS.mining_activity,
+          'agricultural_burn', CLASS_COLORS.agricultural_burn,
+          'wildfire', CLASS_COLORS.wildfire,
           'uncertain', CLASS_COLORS.uncertain,
           '#ffffff',
         ],

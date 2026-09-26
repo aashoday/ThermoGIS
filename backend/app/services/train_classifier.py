@@ -6,6 +6,7 @@ reuse by the API layer.
 """
 import os
 
+import json
 import joblib
 import lightgbm as lgb
 import pandas as pd
@@ -25,7 +26,8 @@ ENCODER_PATH = os.path.join(MODEL_DIR, "label_encoder.joblib")
 UPDATE_PREDICTION_SQL = text("""
     UPDATE hotspots
     SET predicted_class = :predicted_class,
-        prediction_confidence = :prediction_confidence
+        prediction_confidence = :prediction_confidence,
+        top_features = :top_features
     WHERE id = :hotspot_id
 """)
 
@@ -122,17 +124,33 @@ def train_and_predict():
         # falling back to something else.
         model.fit(X, y, categorical_feature=["landcover_class", "nearest_asset_type"])
 
+                # SHAP-style explanation via LightGBM's native TreeSHAP — real
+        # per-feature contributions, computed from this final model (the
+        # same one used for future live inference).
+        n_features = len(FEATURE_COLUMNS)
+        contrib = model.booster_.predict(X, pred_contrib=True).reshape(len(X), len(LABELS), n_features + 1)
+        final_pred_idx = model.predict(X)
+        top_features_list = []
+        for i in range(len(X)):
+            row_contrib = contrib[i, final_pred_idx[i], :n_features]
+            ranked = sorted(zip(FEATURE_COLUMNS, row_contrib), key=lambda x: abs(x[1]), reverse=True)[:3]
+            top_features_list.append(json.dumps([
+                {"feature": feat, "value": str(X.iloc[i][feat]), "contribution": round(float(val), 4)}
+                for feat, val in ranked
+            ]))
+
         os.makedirs(MODEL_DIR, exist_ok=True)
         joblib.dump(model, MODEL_PATH)
         joblib.dump(encoder, ENCODER_PATH)
         print(f"\nModel saved to {MODEL_PATH}")
 
-        for hotspot_id, label, confidence in zip(df["id"], predicted_labels, confidences):
+        for hotspot_id, label, confidence, top_features in zip(df["id"], predicted_labels, confidences, top_features_list):
             db.execute(UPDATE_PREDICTION_SQL, {
                 "predicted_class": label,
                 "prediction_confidence": float(confidence),
+                "top_features": top_features,
                 "hotspot_id": hotspot_id,
-            })
+        })
         db.commit()
         print(f"Wrote predictions back to {len(df)} hotspots.")
 

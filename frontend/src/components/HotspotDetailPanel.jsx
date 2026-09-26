@@ -1,14 +1,20 @@
 const CLASS_LABELS = {
-  industrial: 'Industrial',
-  non_industrial: 'Non-Industrial',
-  uncertain: 'Uncertain',
-}
+  industrial_fire: "Industrial Fire",
+  gas_flare: "Gas Flare",
+  mining_activity: "Mining Activity",
+  agricultural_burn: "Agricultural Burn",
+  wildfire: "Wildfire",
+  uncertain: "Uncertain",
+};
 
 const CLASS_COLORS = {
-  industrial: 'bg-red-500',
-  non_industrial: 'bg-gray-500',
-  uncertain: 'bg-amber-500',
-}
+  industrial_fire: "#dc2626",
+  gas_flare: "#ea580c",
+  mining_activity: "#92400e",
+  agricultural_burn: "#ca8a04",
+  wildfire: "#16a34a",
+  uncertain: "#6b7280",
+};
 
 function formatDistance(meters) {
   if (meters == null) return 'N/A'
@@ -43,9 +49,10 @@ export default function HotspotDetailPanel({ hotspot, onClose }) {
     <div className="absolute top-4 right-4 w-80 bg-slate-800 text-white rounded-lg shadow-2xl border border-slate-700 overflow-hidden">
       <div className="flex items-center justify-between px-4 py-3 border-b border-slate-700">
         <div className="flex items-center gap-2">
-          <span className={`w-3 h-3 rounded-full ${classColor}`} />
+          <span className="w-3 h-3 rounded-full" style={{ backgroundColor: classColor }} />
           <h2 className="font-semibold text-sm">{classLabel}</h2>
         </div>
+
         <button
           onClick={onClose}
           className="text-slate-400 hover:text-white text-lg leading-none"
@@ -56,28 +63,73 @@ export default function HotspotDetailPanel({ hotspot, onClose }) {
       </div>
 
       <div className="p-4 space-y-3 text-sm">
+        <img
+          src={getSatelliteImageUrl(
+            hotspot.latitude,
+            hotspot.longitude,
+            hotspot.acquired_at
+          )}
+          alt="Satellite view"
+          style={{
+            width: '100%',
+            borderRadius: 8,
+            marginBottom: 12,
+          }}
+          onError={(e) => {
+            e.target.style.display = 'none'
+          }}
+        />
+
         {confidencePct !== null && (
           <div>
             <div className="flex justify-between text-slate-400 mb-1">
               <span>Confidence</span>
               <span>{confidencePct}%</span>
             </div>
+
             <div className="w-full h-1.5 bg-slate-700 rounded-full overflow-hidden">
               <div
-                className={`h-full ${classColor}`}
-                style={{ width: `${confidencePct}%` }}
+                className="h-full"
+                style={{ width: `${confidencePct}%`, backgroundColor: classColor }}
               />
             </div>
           </div>
         )}
 
-        <DetailRow label="Nearest Asset" value={hotspot.nearest_asset_name || 'Unnamed'} />
-        <DetailRow label="Asset Type" value={hotspot.nearest_asset_type || 'N/A'} />
-        <DetailRow label="Distance" value={formatDistance(hotspot.distance_to_asset_m)} />
-        <DetailRow label="Radiative Power" value={hotspot.frp != null ? `${hotspot.frp} MW` : 'N/A'} />
-        <DetailRow label="Source" value={hotspot.source} />
-        <DetailRow label="Detected" value={formatDateTime(hotspot.acquired_at)} />
-        <DetailRow label="Cluster ID" value={hotspot.cluster_id ?? 'N/A'} />
+        <DetailRow
+          label="Nearest Asset"
+          value={hotspot.nearest_asset_name || 'Unnamed'}
+        />
+
+        <DetailRow
+          label="Asset Type"
+          value={hotspot.nearest_asset_type || 'N/A'}
+        />
+
+        <DetailRow
+          label="Distance"
+          value={formatDistance(hotspot.distance_to_asset_m)}
+        />
+
+        <DetailRow
+          label="Radiative Power"
+          value={hotspot.frp != null ? `${hotspot.frp} MW` : 'N/A'}
+        />
+
+        <DetailRow
+          label="Source"
+          value={hotspot.source}
+        />
+
+        <DetailRow
+          label="Detected"
+          value={formatDateTime(hotspot.acquired_at)}
+        />
+
+        <DetailRow
+          label="Cluster ID"
+          value={hotspot.cluster_id ?? 'N/A'}
+        />
 
         <a
           href={getDirectionsUrl(hotspot)}
@@ -90,6 +142,14 @@ export default function HotspotDetailPanel({ hotspot, onClose }) {
       </div>
     </div>
   )
+}
+
+function getSatelliteImageUrl(lat, lon, acquiredAt) {
+  const buffer = 0.05 // ~5.5km box around the hotspot
+  const bbox = `${lat - buffer},${lon - buffer},${lat + buffer},${lon + buffer}`
+  const date = acquiredAt.slice(0, 10) // YYYY-MM-DD
+
+  return `https://wvs.earthdata.nasa.gov/api/v1/snapshot?REQUEST=GetSnapshot&LAYERS=VIIRS_SNPP_CorrectedReflectance_TrueColor&CRS=EPSG:4326&TIME=${date}&BBOX=${bbox}&FORMAT=image/jpeg&WIDTH=400&HEIGHT=400`
 }
 
 function DetailRow({ label, value }) {

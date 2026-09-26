@@ -1,8 +1,11 @@
 const FILTERS = [
-  { value: null, label: 'All', color: null },
-  { value: 'industrial', label: 'Industrial', color: 'bg-red-500' },
-  { value: 'non_industrial', label: 'Non-Industrial', color: 'bg-gray-500' },
-  { value: 'uncertain', label: 'Uncertain', color: 'bg-amber-500' },
+    { value: null, label: 'All', color: null },
+    { value: 'industrial_fire', label: 'Industrial Fire', color: 'bg-red-600' },
+    { value: 'gas_flare', label: 'Gas Flare', color: 'bg-orange-600' },
+    { value: 'mining_activity', label: 'Mining Activity', color: 'bg-amber-800' },
+    { value: 'agricultural_burn', label: 'Agricultural Burn', color: 'bg-yellow-600' },
+    { value: 'wildfire', label: 'Wildfire', color: 'bg-green-600' },
+    { value: 'uncertain', label: 'Uncertain', color: 'bg-gray-500' },
 ]
 
 export default function Legend({ activeFilter, onFilterChange }) {
